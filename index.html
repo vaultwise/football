@@ -46,6 +46,8 @@
       width: 100%;
       height: 100%;
       object-fit: cover;
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
     }
 
     .overlay {
@@ -348,7 +350,7 @@
   <!-- ── Scroll-scrub section ── -->
   <section class="scrub-section" id="scrub-section">
     <div class="sticky-wrap">
-      <video id="vid" muted playsinline preload="auto">
+      <video id="vid" muted playsinline webkit-playsinline preload="auto">
         <source src="football.mp4" type="video/mp4">
       </video>
 
@@ -425,6 +427,7 @@
 
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let videoDuration = 0;
+    let unlocked = false;
 
     function getProgress() {
       const scrollTop  = window.scrollY;
@@ -451,17 +454,35 @@
 
     video.addEventListener('loadedmetadata', () => {
       videoDuration = video.duration;
-      video.pause();
       scrub();
     });
 
     video.addEventListener('durationchange', () => { videoDuration = video.duration; });
 
-    // Keep video paused — we control time manually via currentTime
-    video.addEventListener('play', () => video.pause());
+    // iOS Safari ignores preload and won't render frames until play() is called once.
+    // We play then immediately pause on the first user interaction to unlock scrubbing.
+    function unlockVideo() {
+      if (unlocked) return;
+      unlocked = true;
+      const p = video.play();
+      if (p !== undefined) {
+        p.then(() => { video.pause(); scrub(); }).catch(() => {});
+      } else {
+        video.pause();
+      }
+    }
+
+    // Trigger unlock on first touch or scroll
+    document.addEventListener('touchstart',  unlockVideo, { once: true, passive: true });
+    document.addEventListener('touchmove',   unlockVideo, { once: true, passive: true });
+    document.addEventListener('scroll',      unlockVideo, { once: true, passive: true });
+
+    // After unlock, keep video paused — we control time via currentTime
+    video.addEventListener('play', () => { if (unlocked) video.pause(); });
 
     let rafPending = false;
     function onScroll() {
+      unlockVideo();
       if (!rafPending) {
         rafPending = true;
         requestAnimationFrame(() => { scrub(); rafPending = false; });
