@@ -350,7 +350,7 @@
   <!-- ── Scroll-scrub section ── -->
   <section class="scrub-section" id="scrub-section">
     <div class="sticky-wrap">
-      <video id="vid" muted playsinline webkit-playsinline preload="auto">
+      <video id="vid" muted playsinline webkit-playsinline autoplay preload="auto">
         <source src="football.mp4" type="video/mp4">
       </video>
 
@@ -427,14 +427,13 @@
 
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let videoDuration = 0;
-    let unlocked = false;
 
+    // getBoundingClientRect is more reliable than offsetTop on mobile
     function getProgress() {
-      const scrollTop  = window.scrollY;
-      const sectionTop = scrubSection.offsetTop;
-      const sectionH   = scrubSection.offsetHeight;
-      const vh         = window.innerHeight;
-      return Math.max(0, Math.min(1, (scrollTop - sectionTop) / (sectionH - vh)));
+      const rect     = scrubSection.getBoundingClientRect();
+      const sectionH = scrubSection.offsetHeight;
+      const vh       = window.innerHeight;
+      return Math.max(0, Math.min(1, -rect.top / (sectionH - vh)));
     }
 
     function applyProgress(progress) {
@@ -452,46 +451,28 @@
 
     function scrub() { applyProgress(getProgress()); }
 
-    video.addEventListener('loadedmetadata', () => {
-      videoDuration = video.duration;
-      scrub();
-    });
+    video.addEventListener('loadedmetadata', () => { videoDuration = video.duration; scrub(); });
+    video.addEventListener('durationchange', () => { videoDuration = video.duration; });
+    video.addEventListener('canplay',        () => { if (!videoDuration) { videoDuration = video.duration; scrub(); } });
 
-    video.addEventListener('durationchange', () => {
-      videoDuration = video.duration;
-      scrub();
-    });
-
-    // iOS Safari only renders new frames when the video is in a "playing" state.
-    // Pausing it freezes the display at the unlock frame — currentTime changes are
-    // ignored visually. Fix: play at playbackRate=0 (frozen) so the video stays
-    // "active" and renders whatever frame currentTime points to.
-    function unlockVideo() {
-      if (unlocked) return;
-      unlocked = true;
-      const p = video.play();
-      if (p !== undefined) {
-        p.then(() => {
-          video.playbackRate = 0;
-          scrub();
-        }).catch(() => { unlocked = false; });
-      }
-    }
-
-    document.addEventListener('touchstart', unlockVideo, { once: true, passive: true });
-    document.addEventListener('touchmove',  unlockVideo, { once: true, passive: true });
+    // autoplay on a muted+playsinline video works on iOS without a user gesture.
+    // playbackRate=0.001 keeps the video in an "active playing" state — iOS Safari
+    // only renders new frames from currentTime when the video is not fully paused.
+    // At 0.001x a 30s video drifts only ~0.03s if the user stops scrolling.
+    video.addEventListener('play', () => { video.playbackRate = 0.001; });
 
     let rafPending = false;
     function onScroll() {
-      unlockVideo();
       if (!rafPending) {
         rafPending = true;
         requestAnimationFrame(() => { scrub(); rafPending = false; });
       }
     }
 
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', scrub,    { passive: true });
+    // touchmove catches active-finger scrolling on iOS where scroll events can lag
+    window.addEventListener('touchmove', onScroll, { passive: true });
+    window.addEventListener('scroll',    onScroll, { passive: true });
+    window.addEventListener('resize',    scrub,    { passive: true });
     scrub();
   </script>
 </body>
