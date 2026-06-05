@@ -457,28 +457,29 @@
       scrub();
     });
 
-    video.addEventListener('durationchange', () => { videoDuration = video.duration; });
+    video.addEventListener('durationchange', () => {
+      videoDuration = video.duration;
+      scrub();
+    });
 
-    // iOS Safari ignores preload and won't render frames until play() is called once.
-    // We play then immediately pause on the first user interaction to unlock scrubbing.
+    // iOS Safari only renders new frames when the video is in a "playing" state.
+    // Pausing it freezes the display at the unlock frame — currentTime changes are
+    // ignored visually. Fix: play at playbackRate=0 (frozen) so the video stays
+    // "active" and renders whatever frame currentTime points to.
     function unlockVideo() {
       if (unlocked) return;
       unlocked = true;
       const p = video.play();
       if (p !== undefined) {
-        p.then(() => { video.pause(); scrub(); }).catch(() => {});
-      } else {
-        video.pause();
+        p.then(() => {
+          video.playbackRate = 0;
+          scrub();
+        }).catch(() => { unlocked = false; });
       }
     }
 
-    // Trigger unlock on first touch or scroll
-    document.addEventListener('touchstart',  unlockVideo, { once: true, passive: true });
-    document.addEventListener('touchmove',   unlockVideo, { once: true, passive: true });
-    document.addEventListener('scroll',      unlockVideo, { once: true, passive: true });
-
-    // After unlock, keep video paused — we control time via currentTime
-    video.addEventListener('play', () => { if (unlocked) video.pause(); });
+    document.addEventListener('touchstart', unlockVideo, { once: true, passive: true });
+    document.addEventListener('touchmove',  unlockVideo, { once: true, passive: true });
 
     let rafPending = false;
     function onScroll() {
