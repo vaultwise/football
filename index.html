@@ -435,11 +435,25 @@
       return Math.max(0, Math.min(1, -rect.top / (sectionH - vh)));
     }
 
+    let pendingSeek = null;
+
+    // When seeking completes, apply the latest scroll position (skip intermediates)
+    video.addEventListener('seeked', () => {
+      if (pendingSeek !== null) {
+        video.currentTime = pendingSeek;
+        pendingSeek = null;
+      }
+    });
+
     function applyProgress(progress) {
       if (!prefersReducedMotion && videoDuration > 0) {
         const target = progress * videoDuration;
         if (Math.abs(video.currentTime - target) > 0.033) {
-          video.currentTime = target;
+          if (video.seeking) {
+            pendingSeek = target; // store latest, apply when current seek finishes
+          } else {
+            video.currentTime = target;
+          }
         }
       }
       progressFill.style.width  = (progress * 100).toFixed(1) + '%';
