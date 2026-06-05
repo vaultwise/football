@@ -350,7 +350,7 @@
   <!-- ── Scroll-scrub section ── -->
   <section class="scrub-section" id="scrub-section">
     <div class="sticky-wrap">
-      <video id="vid" muted playsinline webkit-playsinline preload="auto">
+      <video id="vid" muted playsinline webkit-playsinline preload="auto" loop>
         <source src="football.mp4" type="video/mp4">
       </video>
 
@@ -473,7 +473,7 @@
     // browsers. touchstart never fires on desktop so desktop stays unaffected.
     function unlockVideo() {
       video.play().then(() => {
-        video.playbackRate = 0.1;
+        video.playbackRate = 0.0625;
         unlocked = true;
         videoDuration = video.duration || videoDuration;
         document.removeEventListener('touchstart', unlockVideo);
