@@ -426,13 +426,7 @@
     const progressLabel= document.getElementById('progress-label');
 
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
     let videoDuration = 0;
-    let unlocked      = false;
-    let playPending   = false;
-    let queuedTime    = null;
 
     function getProgress() {
       const rect     = scrubSection.getBoundingClientRect();
@@ -441,29 +435,11 @@
       return Math.max(0, Math.min(1, -rect.top / (sectionH - vh)));
     }
 
-    function seekTo(time) {
-      // On iOS a paused video won't render new frames — must play briefly then pause
-      if (isIOS && unlocked) {
-        queuedTime = time;
-        if (playPending) { video.currentTime = time; return; }
-        playPending = true;
-        video.currentTime = queuedTime;
-        queuedTime = null;
-        video.play().then(() => {
-          video.pause();
-          playPending = false;
-          if (queuedTime !== null) seekTo(queuedTime);
-        }).catch(() => { playPending = false; });
-      } else {
-        video.currentTime = time;
-      }
-    }
-
     function applyProgress(progress) {
       if (!prefersReducedMotion && videoDuration > 0) {
         const target = progress * videoDuration;
         if (Math.abs(video.currentTime - target) > 0.033) {
-          seekTo(target);
+          video.currentTime = target;
         }
       }
       progressFill.style.width  = (progress * 100).toFixed(1) + '%';
@@ -477,13 +453,22 @@
     video.addEventListener('loadedmetadata', () => { videoDuration = video.duration; scrub(); });
     video.addEventListener('durationchange', () => { videoDuration = video.duration; });
 
+    // Mobile: video.currentTime only renders frames when the video is in a playing
+    // state. On first touch we call play() then set playbackRate=0.1 (near-freeze)
+    // so the video stays "active" — currentTime scrubbing then works on all mobile
+    // browsers. touchstart never fires on desktop so desktop stays unaffected.
     function unlockVideo() {
-      if (unlocked) return;
-      unlocked = true;
-      video.play().then(() => { video.pause(); scrub(); }).catch(() => { unlocked = false; });
+      video.play().then(() => {
+        video.playbackRate = 0.1;
+        unlocked = true;
+        videoDuration = video.duration || videoDuration;
+        document.removeEventListener('touchstart', unlockVideo);
+        scrub();
+      }).catch(() => {});
     }
 
-    document.addEventListener('touchstart', unlockVideo, { once: true, passive: true });
+    let unlocked = false;
+    document.addEventListener('touchstart', unlockVideo, { passive: true });
 
     let rafPending = false;
     function onScroll() {
